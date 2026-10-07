@@ -34,6 +34,12 @@ export function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
 }
 
+// « ENAYA » serait épelé par la synthèse vocale : on le dit « Enaya ».
+export function childName() {
+  const n = state.childName.trim();
+  return n && n[0].toUpperCase() + n.slice(1).toLowerCase();
+}
+
 export function world(id) {
   return (state.worlds[id] ??= { levelsDone: 0, bossDone: false });
 }

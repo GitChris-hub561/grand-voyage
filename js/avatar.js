@@ -21,7 +21,18 @@ function hairBack(style, c) {
         const r = (a * Math.PI) / 180;
         s += `<circle cx="${100 + 56 * Math.cos(r)}" cy="${95 - 56 * Math.sin(r)}" r="18" ${f}/>`;
       }
-      return s + `<circle cx="46" cy="132" r="16" ${f}/><circle cx="154" cy="132" r="16" ${f}/>`;
+      // Boucles longues qui tombent sur les épaules.
+      for (let y = 128; y <= 184; y += 18) s += `<circle cx="46" cy="${y}" r="16" ${f}/><circle cx="154" cy="${y}" r="16" ${f}/>`;
+      return s;
+    }
+    case 'afro': {
+      // Bosses avec contour, puis un disque plein qui cache les contours intérieurs.
+      let s = '';
+      for (let a = 0; a < 360; a += 24) {
+        const r = (a * Math.PI) / 180;
+        s += `<circle cx="${100 + 64 * Math.cos(r)}" cy="${88 - 64 * Math.sin(r)}" r="18" ${f}/>`;
+      }
+      return s + `<circle cx="100" cy="88" r="66" fill="${c}"/>`;
     }
     case 'chignon': return `<circle cx="100" cy="34" r="24" ${f}/>`;
   }

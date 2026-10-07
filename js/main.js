@@ -1,15 +1,15 @@
 // Routeur d'écrans : accueil, avatar, carte, monde, niveau, boss, rituel, parent.
 
-import { state, save, world, exportSave, importSave, resetSave } from './store.js';
+import { state, save, world, exportSave, importSave, resetSave, childName as name } from './store.js';
 import { WORLDS, SUBJECTS, LEVEL_PLAN, AVATAR_OPTIONS, DEFAULT_AVATAR } from './data.js';
-import { say, sfx, unlockAudio, voices } from './audio.js';
+import { say, play, sfx, unlockAudio, voices } from './audio.js';
 import { avatarSVG } from './avatar.js';
-import { $, $$, wait, hud, refreshWallet, fly, confetti, celebrate, longPress, praise } from './ui.js';
+import { $, $$, wait, pick, hud, refreshWallet, fly, confetti, celebrate, longPress, praise } from './ui.js';
+import * as games from './games.js';
 
 const app = $('#app');
 const session = { endsAt: 0, over: false, starsToday: 0 };
 let screen = '';
-const name = () => state.childName || '';
 
 function show(id, html, back = map) {
   screen = id;
@@ -45,7 +45,11 @@ function start() {
         <input type="range" min="15" max="30" step="5" value="${m}" data-minutes>
         <output>${m} min</output>
       </label>
+      <button class="lock restart" data-restart aria-label="Nouvelle partie (appui long)"><svg viewBox="0 0 36 36"><circle class="ring" cx="18" cy="18" r="16"/></svg>🔄</button>
     </div>`);
+  longPress($('[data-restart]'), 3000, () => {
+    if (confirm('Nouvelle partie : effacer toute la progression (personnage, étoiles, mondes) ?')) { resetSave(); start(); }
+  });
   const range = $('[data-minutes]');
   range.addEventListener('input', () => {
     range.nextElementSibling.textContent = `${range.value} min`;
@@ -198,75 +202,81 @@ function worldScreen(w) {
   say(p.levelsDone === 0 ? `Bienvenue à ${w.name} ! Touche le rond qui brille.` : `Te revoilà à ${w.name} !`);
 }
 
-/* ---------- Niveau (provisoire : les vrais jeux arrivent aux étapes 2 à 5) ---------- */
+/* ---------- Niveau : un vrai jeu de la matière ---------- */
 
-function levelScreen(w, i) {
-  const subject = SUBJECTS[LEVEL_PLAN[i]];
-  const slots = [[15, 30], [38, 62], [60, 28], [80, 60], [48, 40], [25, 70]].sort(() => Math.random() - 0.5).slice(0, 5);
-  show('level', `${hud({ back: true })}
+// Prépare l'écran de jeu et le contexte passé aux jeux (voir games.js).
+function playScreen(id, w, extra = '') {
+  show(id, `${hud({ back: true })}
     <div class="play" style="--sky:${w.sky};--ground:${w.ground}">
-      <div class="subject-badge" style="--c:${subject.color}">${subject.icon}</div>
-      ${slots.map(([x, y]) => `<button class="target" style="left:${x}%;top:${y}%">⭐</button>`).join('')}
+      ${extra}
+      <button class="btn-round replay" data-replay aria-label="Réécouter">🔊</button>
+      <div class="stage"></div>
     </div>`, () => worldScreen(w));
-  let left = slots.length;
-  $$('.target').forEach(b => b.addEventListener('click', async () => {
-    if (b.disabled) return;
-    b.disabled = true;
-    b.style.visibility = 'hidden';
-    sfx('star');
-    state.wallet.stars++;
-    session.starsToday++;
-    save();
-    fly(b, '⭐', '#w-stars').then(refreshWallet);
-    if (--left) return;
-    await wait(900);
-    const p = world(w.id);
-    if (i === p.levelsDone) p.levelsDone++;
-    state.wallet.diamonds++;
-    save();
-    sfx('diamond');
-    confetti();
-    say(`${praise()} Tu gagnes un diamant !`);
-    await celebrate('💎');
-    afterLevel(w);
-  }));
-  say(`Bientôt ici : ${subject.name} ! En attendant, attrape les étoiles !`);
+  const stage = $('.stage');
+  // Écran quitté : les promesses ne se résolvent plus, le jeu s'arrête.
+  const alive = fn => (...a) => (stage.isConnected ? fn(...a) : new Promise(() => {}));
+  let prompt = () => {};
+  const ctx = {
+    w, stage,
+    avatar: avatarSVG(state.avatar, { className: 'avatar' }),
+    say: alive(say),
+    play: alive(play),
+    setPrompt: fn => (prompt = fn),
+    replay: () => stage.isConnected && prompt(),
+    award: el => {
+      sfx('star');
+      state.wallet.stars++;
+      session.starsToday++;
+      save();
+      fly(el, '⭐', '#w-stars').then(refreshWallet);
+    },
+  };
+  $('[data-replay]').addEventListener('click', () => { sfx('pop'); ctx.replay(); });
+  return ctx;
 }
 
-/* ---------- Boss gentil (provisoire : 5 épreuves = 5 étincelles) ---------- */
+async function levelScreen(w, i) {
+  const subject = LEVEL_PLAN[i];
+  const ctx = playScreen('level', w, `<div class="subject-badge" style="--c:${SUBJECTS[subject].color}">${SUBJECTS[subject].icon}</div>`);
+  await games[subject](ctx);
+  if (!ctx.stage.isConnected) return;
+  const p = world(w.id);
+  if (i === p.levelsDone) p.levelsDone++;
+  state.wallet.diamonds++;
+  save();
+  refreshWallet();
+  sfx('diamond');
+  confetti();
+  say(`${praise()} Tu gagnes un diamant !`);
+  await celebrate('💎');
+  afterLevel(w);
+}
 
-function bossScreen(w) {
-  show('boss', `${hud({ back: true })}
-    <div class="play" style="--sky:${w.sky};--ground:${w.ground}">
-      <div class="boss-big sleepy">${w.boss.emoji}</div>
-      <div class="gauge">${'<i></i>'.repeat(5)}</div>
-      <button class="target spark" style="left:50%;top:72%">✨</button>
-    </div>`, () => worldScreen(w));
-  let done = 0;
-  const spark = $('.spark'), boss = $('.boss-big');
-  spark.addEventListener('click', async () => {
-    sfx('star');
-    $$('.gauge i')[done].classList.add('on');
-    boss.animate([{ transform: 'scale(1) rotate(0)' }, { transform: 'scale(1.15) rotate(-6deg)' }, { transform: 'scale(1) rotate(0)' }], { duration: 400 });
-    if (++done < 5) {
-      spark.style.left = `${20 + Math.random() * 60}%`;
-      spark.style.top = `${68 + Math.random() * 16}%`;
-      return say(praise());
-    }
-    spark.remove();
-    boss.classList.remove('sleepy');
-    const p = world(w.id);
-    p.bossDone = true;
-    if (!state.bossJewels.includes(w.jewel.id)) state.bossJewels.push(w.jewel.id);
-    state.wallet.diamonds += 3;
-    save();
-    sfx('fanfare');
-    confetti(80);
-    say(`Merci ${name()} ! Voici ${w.jewel.name} pour toi !`);
-    await celebrate(`<span class="jewel-big">${w.jewel.emoji}</span>`, 5000);
-    afterLevel(w);
-  });
-  say(`${w.boss.says} Touche les étincelles !`);
+/* ---------- Boss gentil : 5 épreuves des matières déjà vues ---------- */
+
+async function bossScreen(w) {
+  const ctx = playScreen('boss', w, `<div class="boss-big sleepy">${w.boss.emoji}</div><div class="gauge">${'<i></i>'.repeat(5)}</div>`);
+  const boss = $('.boss-big');
+  await ctx.say(w.boss.says);
+  for (let k = 0; k < 5; k++) {
+    await pick(games.bossRounds)(ctx);
+    if (!ctx.stage.isConnected) return;
+    $$('.gauge i')[k].classList.add('on');
+    boss.animate([{ transform: 'scale(1) rotate(0)' }, { transform: 'scale(1.2) rotate(-8deg)' }, { transform: 'scale(1) rotate(0)' }], { duration: 500 });
+  }
+  ctx.stage.innerHTML = '';
+  boss.classList.remove('sleepy');
+  const p = world(w.id);
+  p.bossDone = true;
+  if (!state.bossJewels.includes(w.jewel.id)) state.bossJewels.push(w.jewel.id);
+  state.wallet.diamonds += 3;
+  save();
+  refreshWallet();
+  sfx('fanfare');
+  confetti(80);
+  say(`Merci ${name()} ! Voici ${w.jewel.name} pour toi !`);
+  await celebrate(`<span class="jewel-big">${w.jewel.emoji}</span>`, 5000);
+  afterLevel(w);
 }
 
 /* ---------- Rituel de fin de séance ---------- */
@@ -311,6 +321,8 @@ function parent() {
     <div class="parent">
       <h1>Espace parent</h1>
       <label>Prénom de l'enfant <input data-name value="${state.childName.replace(/"/g, '&quot;')}" maxlength="20"></label>
+      <p><button data-hear>🔊 Écouter le prénom</button></p>
+      <p class="hint">Si la voix le prononce mal, écrivez-le comme il se prononce (par exemple « Énaïa »).</p>
       <label>Durée de séance par défaut : <output>${state.settings.sessionMinutes} min</output>
         <input type="range" min="15" max="30" step="5" value="${state.settings.sessionMinutes}" data-minutes></label>
       ${remaining !== null ? `<p>Séance en cours : ${session.over ? 'terminée' : `${remaining} min restantes`} <button data-more>+5 min</button></p>` : ''}
@@ -325,6 +337,7 @@ function parent() {
     </div>`);
 
   $('[data-name]').addEventListener('input', e => { state.childName = e.target.value.trim(); save(); });
+  $('[data-hear]').addEventListener('click', () => say(`Bravo ${name()} !`));
   const range = $('[data-minutes]');
   range.addEventListener('input', () => {
     state.settings.sessionMinutes = +range.value;

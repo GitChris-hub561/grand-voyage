@@ -29,6 +29,8 @@ export function say(text, lang = 'fr-FR') {
     u.rate = 0.9;
     u.pitch = 1.1;
     u.onend = u.onerror = resolve;
+    // Certains navigateurs n'envoient jamais « onend » : on n'attend pas plus que nécessaire.
+    setTimeout(resolve, 1200 + text.length * 90);
     speechSynthesis.speak(u);
   });
 }

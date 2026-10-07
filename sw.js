@@ -4,7 +4,8 @@ const CACHE = 'grand-voyage';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css', 'fonts/andika-bold.woff2',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  'js/main.js', 'js/data.js', 'js/store.js', 'js/audio.js', 'js/ui.js', 'js/avatar.js',
+  'js/main.js', 'js/data.js', 'js/store.js', 'js/audio.js', 'js/ui.js', 'js/avatar.js', 'js/games.js',
+  ...'aeioumslfrvnjzptbdkg'.split('').map(x => `audio/phonemes/${x}.mp3`),
 ];
 
 self.addEventListener('install', e => {
@@ -15,7 +16,7 @@ self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(fetch(e.request)
+  e.respondWith(fetch(e.request, { cache: 'no-cache' })
     .then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
       return res;

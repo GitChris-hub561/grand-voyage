@@ -1,6 +1,6 @@
 // Petits outils d'interface : barre du haut, récompenses, confettis, appui long.
 
-import { state } from './store.js';
+import { state, childName } from './store.js';
 import { PRAISE } from './data.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
@@ -8,7 +8,7 @@ export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 export const wait = ms => new Promise(r => setTimeout(r, ms));
 export const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
-export const praise = () => pick(PRAISE).replace('{name}', state.childName || 'ma championne');
+export const praise = () => pick(PRAISE).replace('{name}', childName() || 'ma championne');
 
 export function hud({ back = false, wardrobe = false } = {}) {
   return `<header class="hud">
