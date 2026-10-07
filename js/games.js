@@ -3,7 +3,7 @@
 // Si l'enfant quitte l'écran, ctx.say/ctx.play ne se résolvent jamais : le jeu s'arrête tout seul.
 
 import { state, save } from './store.js';
-import { LETTER_STEPS, PHONEME, SOUND_WORDS, NUMBER_WORDS, NUMBER_MAX, SPANISH, CODE_GRIDS } from './data.js';
+import { LETTER_STEPS, PHONEME, SOUND_WORDS, NUMBER_WORDS, NUMBER_MAX, SPANISH } from './data.js';
 import { sfx } from './audio.js';
 import { $, $$, wait, pick, praise } from './ui.js';
 
@@ -67,9 +67,6 @@ async function discover(ctx, letters) {
     await new Promise(r => b.addEventListener('click', r, { once: true }));
     sfx('pop');
     await sound(ctx, L);
-    await ctx.say('Répète avec moi !');
-    await wait(500);
-    await sound(ctx, L);
   }
 }
 
@@ -81,7 +78,38 @@ export async function letters(ctx) {
     fresh.forEach(L => (s.mastery[L] ??= 0));
     save();
   }
+  // Une fois sur deux : la course contre un animal farceur.
+  s.races = (s.races ?? 0) + 1;
+  if (s.races % 2) return race(ctx);
   for (let r = 0; r < ROUNDS; r++) await letterRound(ctx);
+}
+
+// Chaque bonne lettre fait avancer d'une case. L'adversaire avance tout seul,
+// mais s'arrête juste avant l'arrivée : l'enfant gagne toujours, au bout du suspense.
+async function race(ctx) {
+  const N = 6, rival = pick(['🦊', '🐺', '🐊', '🦝']);
+  const track = document.createElement('div');
+  track.className = 'track';
+  ctx.stage.before(track);
+  let me = 0, them = 0;
+  const lane = (who, at) => `<div class="lane">${Array.from({ length: N + 1 }, (_, i) =>
+    `<span class="slot">${i === at ? who : i === N ? '🏁' : ''}</span>`).join('')}</div>`;
+  const draw = () => (track.innerHTML = lane(`<span class="runner">${ctx.avatar}</span>`, me) + lane(`<span class="runner">${rival}</span>`, them));
+  draw();
+  const timer = setInterval(() => {
+    if (!track.isConnected) return clearInterval(timer);
+    if (them < N - 1) { them++; draw(); }
+  }, 9000);
+  await ctx.say('La course ! Chaque bonne lettre te fait avancer. Va plus vite que lui !');
+  while (me < N) {
+    await letterRound(ctx);
+    me++;
+    draw();
+  }
+  clearInterval(timer);
+  sfx('fanfare');
+  await ctx.say('Tu as gagné la course !');
+  track.remove();
 }
 
 async function letterRound(ctx) {
@@ -243,18 +271,45 @@ export async function spanish(ctx) {
 
 const DIRS = { up: [-1, 0, '⬆️', 'en haut'], down: [1, 0, '⬇️', 'en bas'], left: [0, -1, '⬅️', 'à gauche'], right: [0, 1, '➡️', 'à droite'] };
 
+// Carte d'au moins 7×8 = 56 cases qui grandit (jusqu'à 10×12) et se remplit de pièges avec le niveau.
+// X = piège, * = étoile bonus, S = départ, T = trésor. Toujours au moins un chemin (vérifié).
+export function makeGrid(level) {
+  const rows = Math.min(10, 7 + Math.floor(level / 2)), cols = Math.min(12, 8 + Math.floor(level / 2));
+  const density = Math.min(0.34, 0.14 + level * 0.025);
+  for (let tries = 0; ; tries++) {
+    const g = Array.from({ length: rows }, () => Array.from({ length: cols }, () => (Math.random() < density ? 'X' : '.')));
+    const S = [rows - 1, 0], T = [Math.floor(Math.random() * 2), cols - 1 - Math.floor(Math.random() * 2)];
+    g[S[0]][S[1]] = 'S';
+    g[T[0]][T[1]] = 'T';
+    const dist = { [S]: 0 }, q = [S];
+    while (q.length) {
+      const [y, x] = q.shift();
+      for (const [dy, dx] of Object.values(DIRS)) {
+        const n = [y + dy, x + dx];
+        if (g[n[0]]?.[n[1]] === undefined || g[n[0]][n[1]] === 'X' || n in dist) continue;
+        dist[n] = dist[[y, x]] + 1;
+        q.push(n);
+      }
+    }
+    // Plus le niveau monte, plus le chemin doit faire de détours.
+    if (!(T in dist) || (dist[T] < rows + cols - 2 + Math.min(level, 8) && tries < 300)) continue;
+    const free = Object.keys(dist).map(k => k.split(',').map(Number)).filter(([y, x]) => g[y][x] === '.');
+    shuffle(free).slice(0, 3).forEach(([y, x]) => (g[y][x] = '*'));
+    return g;
+  }
+}
+
 export async function code(ctx) {
   const s = state.skills.code;
-  const i = Math.min(s.level - 1, CODE_GRIDS.length - 2);
-  await codeGrid(ctx, CODE_GRIDS[i]);
-  await codeGrid(ctx, CODE_GRIDS[i + 1]);
-  s.level = Math.min(s.level + 1, CODE_GRIDS.length - 1);
+  await codeGrid(ctx, makeGrid(s.level));
+  s.level++;
   save();
 }
 
-async function codeGrid(ctx, grid) {
+async function codeGrid(ctx, cells) {
   const { w } = ctx;
-  const cells = grid.map(r => [...r]);
+  const traps = [w.trap, '🕳️', '🌿'];   // animal du pays, trou, ronces
+  const trap = (y, x) => traps[(y * 7 + x * 3) % 3];
   let pos = cells.flatMap((r, y) => r.map((c, x) => (c === 'S' ? [y, x] : null))).find(Boolean);
   const cols = cells[0].length;
   const { avatar } = ctx;
@@ -263,7 +318,7 @@ async function codeGrid(ctx, grid) {
       <div class="grid" style="--cols:${cols};--rows:${cells.length}">
         ${cells.map((r, y) => r.map((c, x) => `<div class="cell">${
           y === pos[0] && x === pos[1] ? `<span class="hero">${avatar}</span>` :
-          c === 'T' ? w.treasure : c === 'X' ? w.trap : c === '*' ? '⭐' : ''}</div>`).join('')).join('')}
+          c === 'T' ? w.treasure : c === 'X' ? trap(y, x) : c === '*' ? '⭐' : ''}</div>`).join('')).join('')}
       </div>
       <div class="arrows">${Object.entries(DIRS).map(([k, d]) => `<button class="arrow" data-dir="${k}">${d[2]}</button>`).join('')}</div>`;
   };
@@ -283,7 +338,8 @@ async function codeGrid(ctx, grid) {
       if (c === 'X') {
         sfx('oops');
         $$('.cell', ctx.stage)[n[0] * cols + n[1]].animate([{ scale: 1 }, { scale: 1.3 }, { scale: 1 }], { duration: 400 });
-        await ctx.say('Oups ! Il fait la sieste, passe à côté !');
+        const t = trap(n[0], n[1]);
+        await ctx.say(t === '🕳️' ? 'Attention, un trou ! Passe à côté.' : t === '🌿' ? 'Aïe, les ronces piquent ! Passe à côté.' : 'Oups, il fait la sieste ! Passe à côté.');
         busy = false;
         return;
       }

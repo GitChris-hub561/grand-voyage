@@ -135,18 +135,43 @@ export const SPANISH = [
   { verbs: true, words: [['🗣️', 'hablar', 'parler'], ['🤸‍♀️', 'saltar', 'sauter'], ['🏃‍♀️', 'correr', 'courir'], ['👋', '¡hola!', 'bonjour'], ['🥱', '¡adiós!', 'au revoir']] },
 ];
 
-/* ---------- Code : S départ, T trésor, X piège, * étoile bonus ---------- */
+/* ---------- Boutique : bijoux (étoiles), costumes (diamants), bijoux de boss (gagnés) ---------- */
 
-export const CODE_GRIDS = [
-  ['...', 'S.T', '...'],
-  ['S..', '...', '..T'],
-  ['..T', '...', 'S..'],
-  ['S...', '.X..', '....', '...T'],
-  ['....', 'S.X.', '..X.', '...T'],
-  ['T...', 'XX..', '....', '..XS'],
-  ['S....', '.XX..', '...X.', 'X....', '...XT'],
-  ['S.X..', '..X*.', '....X', 'XX...', 'T...X'],
-  ['..X.T', '.X...', '...X.', 'X*...', 'S..X.'],
-  ['S.X...', '..X.X.', 'X...X.', '..X...', '.*..X.', 'X..X.T'],
-  ['T.X..*', '..X.X.', 'X....X', '..XX..', '.X....', '...X.S'],
+// slot : un seul objet porté par emplacement. style : dessin dans avatar.js.
+export const SHOP = [
+  { id: 'bow_red', name: 'le nœud rouge', slot: 'head', style: 'bow', color: '#FF4D6D', stars: 5 },
+  { id: 'bracelet_lilac', name: 'le bracelet violet', slot: 'wrist', style: 'ring', color: '#B28DFF', stars: 6 },
+  { id: 'bracelet_green', name: 'le bracelet vert', slot: 'wrist', style: 'ring', color: '#5CC971', stars: 6 },
+  { id: 'necklace_pink', name: 'le collier rose', slot: 'neck', style: 'beads', color: '#FF6FA8', stars: 8 },
+  { id: 'necklace_gold', name: 'le collier doré', slot: 'neck', style: 'beads', color: '#FFC83D', stars: 10 },
+  { id: 'earrings_blue', name: 'les boucles d\'oreille bleues', slot: 'ears', style: 'drop', color: '#4D8BFF', stars: 10 },
+  { id: 'earrings_gold', name: 'les boucles d\'oreille dorées', slot: 'ears', style: 'drop', color: '#FFC83D', stars: 12 },
+  { id: 'headjewel_turquoise', name: 'le bijou de tête turquoise', slot: 'head', style: 'forehead', color: '#2EC4B6', stars: 15 },
+  { id: 'tiara', name: 'le diadème de princesse', slot: 'head', style: 'tiara', color: '#FFC83D', stars: 20 },
+  { id: 'crown', name: 'la couronne de reine', slot: 'head', style: 'crown', color: '#FFC83D', stars: 30 },
+  { id: 'costume_alien', name: 'le costume de petit extraterrestre bleu', slot: 'costume', style: 'alien', skin: '#5B8DEF', diamonds: 3 },
+  { id: 'costume_pig', name: 'le costume de petit cochon rose', slot: 'costume', style: 'pig', skin: '#FFB3C7', diamonds: 3 },
+  { id: 'costume_dog', name: 'le costume de chienne bleue', slot: 'costume', style: 'dog', skin: '#7FB2E5', diamonds: 4 },
+  { id: 'costume_monster', name: 'le costume de gros monstre tout doux', slot: 'costume', style: 'monster', skin: '#4FC3E8', diamonds: 5 },
+  // Gagnés contre les boss (voir WORLDS[].jewel.id).
+  { id: 'jewel_miami', name: 'le bracelet coquillage', slot: 'wrist', style: 'shells', color: '#FFE4D6', boss: true },
+  { id: 'jewel_guadeloupe', name: 'les boucles d\'oreille fleurs', slot: 'ears', style: 'flower', color: '#FF5FA2', boss: true },
+  { id: 'jewel_spain', name: 'le peigne à fleur', slot: 'head', style: 'rose', color: '#E63946', boss: true },
+  { id: 'jewel_egypt', name: 'le bijou de tête doré', slot: 'head', style: 'forehead', color: '#FFC83D', boss: true },
+  { id: 'jewel_dubai', name: 'le collier de perles', slot: 'neck', style: 'beads', color: '#FFFFFF', boss: true },
 ];
+
+/* ---------- Drapeaux (les emoji drapeaux ne s'affichent pas sous Windows) ---------- */
+
+const flag = inner => `<svg viewBox="0 0 30 20" class="flag-svg">${inner}<rect width="30" height="20" fill="none" stroke="#3D2C4E" stroke-width="1.2"/></svg>`;
+const stripes = (colors, vertical) => colors.map((c, i) => vertical
+  ? `<rect x="${(30 / colors.length) * i}" width="${30 / colors.length + 0.1}" height="20" fill="${c}"/>`
+  : `<rect y="${(20 / colors.length) * i}" width="30" height="${20 / colors.length + 0.1}" fill="${c}"/>`).join('');
+
+export const FLAGS = {
+  miami: flag(`${stripes(['#B22234', '#fff', '#B22234', '#fff', '#B22234', '#fff', '#B22234'])}<rect width="13" height="11" fill="#3C3B6E"/>${[2.5, 6.5, 10.5].flatMap(x => [2.5, 5.5, 8.5].map(y => `<circle cx="${x}" cy="${y}" r=".9" fill="#fff"/>`)).join('')}`),
+  guadeloupe: flag(stripes(['#0055A4', '#fff', '#EF4135'], true)),
+  spain: flag(`<rect width="30" height="20" fill="#C60B1E"/><rect y="5" width="30" height="10" fill="#FFC400"/>`),
+  egypt: flag(`${stripes(['#CE1126', '#fff', '#000'])}<circle cx="15" cy="10" r="2.2" fill="#C09300"/>`),
+  dubai: flag(`${stripes(['#00732F', '#fff', '#000'])}<rect width="8" height="20" fill="#FF0000"/>`),
+};

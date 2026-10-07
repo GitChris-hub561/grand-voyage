@@ -10,7 +10,7 @@ export const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
 export const praise = () => pick(PRAISE).replace('{name}', childName() || 'ma championne');
 
-export function hud({ back = false, wardrobe = false } = {}) {
+export function hud({ back = false, wardrobe = false, shop = false } = {}) {
   return `<header class="hud">
     ${back ? '<button class="btn-round" data-back aria-label="Retour">🏠</button>' : '<span></span>'}
     <div class="wallet">
@@ -18,6 +18,7 @@ export function hud({ back = false, wardrobe = false } = {}) {
       <span class="pill" id="w-diamonds">💎 <b>${state.wallet.diamonds}</b></span>
     </div>
     <div class="hud-right">
+      ${shop ? '<button class="btn-round" data-shop aria-label="Boutique">🛍️</button>' : ''}
       ${wardrobe ? '<button class="btn-round" data-wardrobe aria-label="Garde-robe">👗</button>' : ''}
       <button class="lock" data-lock aria-label="Espace parent (appui long)"><svg viewBox="0 0 36 36"><circle class="ring" cx="18" cy="18" r="16"/></svg>🔒</button>
     </div>

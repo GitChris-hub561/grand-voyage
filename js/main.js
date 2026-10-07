@@ -1,7 +1,7 @@
 // Routeur d'écrans : accueil, avatar, carte, monde, niveau, boss, rituel, parent.
 
 import { state, save, world, exportSave, importSave, resetSave, childName as name } from './store.js';
-import { WORLDS, SUBJECTS, LEVEL_PLAN, AVATAR_OPTIONS, DEFAULT_AVATAR } from './data.js';
+import { WORLDS, SUBJECTS, LEVEL_PLAN, AVATAR_OPTIONS, DEFAULT_AVATAR, SHOP, FLAGS } from './data.js';
 import { say, play, sfx, unlockAudio, voices } from './audio.js';
 import { avatarSVG } from './avatar.js';
 import { $, $$, wait, pick, hud, refreshWallet, fly, confetti, celebrate, longPress, praise } from './ui.js';
@@ -18,6 +18,7 @@ function show(id, html, back = map) {
   app.className = `screen-${id}`;
   $('[data-back]')?.addEventListener('click', () => { sfx('pop'); back(); });
   $('[data-wardrobe]')?.addEventListener('click', () => { sfx('pop'); createAvatar(); });
+  $('[data-shop]')?.addEventListener('click', () => { sfx('pop'); shop(); });
   const lock = $('[data-lock]');
   if (lock) longPress(lock, 3000, parent);
 }
@@ -130,7 +131,7 @@ function createAvatar() {
 function map() {
   const route = WORLDS.map(w => `${w.x},${w.y}`).join(' ');
   const here = WORLDS.find(w => w.id === state.lastWorld) || WORLDS[0];
-  show('map', `${hud({ wardrobe: true })}
+  show('map', `${hud({ wardrobe: true, shop: true })}
     <div class="sea">
       <svg class="route" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points="${route}"/></svg>
       ${WORLDS.map(w => {
@@ -138,6 +139,7 @@ function map() {
         const dots = Array.from({ length: 8 }, (_, i) => `<i class="${i < p.levelsDone ? 'on' : ''}"></i>`).join('');
         return `<button class="island" data-world="${w.id}" style="left:${w.x}%;top:${w.y}%;--ground:${w.ground};--accent:${w.accent}">
           <span class="landmark">${w.landmark}</span>
+          <span class="flag">${FLAGS[w.id]}</span>
           <span class="dots">${dots}</span>
           ${p.bossDone ? `<span class="jewel-badge">${w.jewel.emoji}</span>` : ''}
           <span class="label">${w.name}</span>
@@ -165,6 +167,8 @@ function map() {
 /* ---------- Un monde : chemin de 8 niveaux + boss ---------- */
 
 const PATH = [[8, 78], [20, 58], [32, 78], [44, 58], [56, 78], [68, 58], [80, 78], [90, 54], [80, 26]];
+// Objets du pays éparpillés hors du chemin.
+const DECOR = [[8, 22], [22, 34], [30, 12], [94, 12], [4, 94], [26, 94], [50, 94], [72, 94], [96, 90]];
 
 function worldScreen(w) {
   const p = world(w.id);
@@ -177,9 +181,12 @@ function worldScreen(w) {
   const [bx, by] = PATH[8];
   const at = PATH[Math.min(p.levelsDone, 8)];
 
-  show('world', `${hud({ back: true, wardrobe: true })}
+  show('world', `${hud({ back: true, wardrobe: true, shop: true })}
     <div class="world" style="--sky:${w.sky};--ground:${w.ground};--accent:${w.accent}">
+      <div class="cloud" style="top:14%">☁️</div><div class="cloud" style="top:30%;animation-delay:-20s">☁️</div>
       <div class="world-landmark">${w.landmark}</div>
+      <div class="world-flag">${FLAGS[w.id]}</div>
+      ${DECOR.map(([x, y], k) => `<span class="decor" style="left:${x}%;top:${y}%">${w.objects[k % w.objects.length]}</span>`).join('')}
       <svg class="route" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points="${PATH.map(q => q.join(',')).join(' ')}"/></svg>
       ${nodes}
       <button class="node boss ${bossState}" data-boss style="left:${bx}%;top:${by}%">
@@ -200,6 +207,57 @@ function worldScreen(w) {
     bossScreen(w);
   });
   say(p.levelsDone === 0 ? `Bienvenue à ${w.name} ! Touche le rond qui brille.` : `Te revoilà à ${w.name} !`);
+}
+
+/* ---------- Boutique des trésors : acheter, porter, enlever ---------- */
+
+function shop() {
+  const owned = item => state.owned.includes(item.id) || (item.boss && state.bossJewels.includes(item.id));
+  const wearing = item => state.avatar.worn?.[item.slot] === item.id;
+  const price = item => (item.boss ? '🏆' : item.diamonds ? `💎 ${item.diamonds}` : `⭐ ${item.stars}`);
+  show('shop', `${hud({ back: true })}
+    <div class="shop">
+      <div class="shop-preview"></div>
+      <div class="shop-items"></div>
+    </div>`, map);
+  const paint = () => {
+    $('.shop-preview').innerHTML = avatarSVG(state.avatar, { className: 'avatar big' });
+    $('.shop-items').innerHTML = SHOP.map((item, i) => `
+      <button class="item ${owned(item) ? 'owned' : ''} ${wearing(item) ? 'on' : ''} ${item.boss && !owned(item) ? 'mystery' : ''}" data-i="${i}">
+        ${avatarSVG({ ...state.avatar, worn: { [item.slot]: item.id } }, { head: !['wrist', 'costume'].includes(item.slot), className: 'avatar mini' })}
+        <span class="price">${owned(item) ? (wearing(item) ? '✔' : '') : price(item)}</span>
+      </button>`).join('');
+    refreshWallet();
+    $$('.item').forEach(b => b.addEventListener('click', () => tap(SHOP[+b.dataset.i])));
+  };
+  const tap = item => {
+    const worn = (state.avatar.worn ??= {});
+    if (owned(item)) {
+      sfx('pop');
+      if (wearing(item)) delete worn[item.slot];
+      else { worn[item.slot] = item.id; say('Que tu es belle !'); }
+    } else if (item.boss) {
+      sfx('oops');
+      return say('Ce trésor-là, on le gagne en aidant un boss !');
+    } else {
+      const cost = item.diamonds || item.stars, purse = item.diamonds ? 'diamonds' : 'stars';
+      const missing = cost - state.wallet[purse];
+      if (missing > 0) {
+        sfx('oops');
+        return say(`Il te manque encore ${missing} ${purse === 'stars' ? 'étoile' : 'diamant'}${missing > 1 ? 's' : ''}. Joue pour en gagner !`);
+      }
+      state.wallet[purse] -= cost;
+      state.owned.push(item.id);
+      worn[item.slot] = item.id;
+      sfx('diamond');
+      confetti();
+      say(`Bravo ! ${item.name[0].toUpperCase()}${item.name.slice(1)} est à toi !`);
+    }
+    save();
+    paint();
+  };
+  paint();
+  say('La boutique des trésors ! Touche un bijou pour l\'acheter ou le mettre.');
 }
 
 /* ---------- Niveau : un vrai jeu de la matière ---------- */
@@ -269,6 +327,8 @@ async function bossScreen(w) {
   const p = world(w.id);
   p.bossDone = true;
   if (!state.bossJewels.includes(w.jewel.id)) state.bossJewels.push(w.jewel.id);
+  const jewel = SHOP.find(x => x.id === w.jewel.id);
+  state.avatar.worn = { ...state.avatar.worn, [jewel.slot]: jewel.id };
   state.wallet.diamonds += 3;
   save();
   refreshWallet();
